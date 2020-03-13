@@ -10,9 +10,9 @@ import time
 import datetime
 import pandas as pd
 
-print("Program: Object Detection")
+print("Program: Object Detection - Array")
 print("Release: 0.1.0")
-print("Date: 2020-02-02")
+print("Date: 2020-03-13")
 print("Author: Brian Neely")
 print()
 print()
@@ -59,7 +59,6 @@ def video_object_recognition(video, temp_fldr_base):
 
     # Create a list of the frames in order
     frame_list = list()
-    frame_list_processed = list()
 
     print("Splitting video file [" + video + "] into individual images...")
 
@@ -127,25 +126,6 @@ def video_object_recognition(video, temp_fldr_base):
 
     # Return the frame list to original call
     return label_df_out
-
-
-def frames_per_second(video):
-    # Get Frames per Second of the movie
-
-    # Start camera
-    video_cap = cv2.VideoCapture(video)
-
-    # Find OpenCV version
-    (major_ver, minor_ver, subminor_ver) = cv2.__version__.split('.')
-
-    if int(major_ver) < 3:
-        fps = video_cap.get(cv2.cv.CV_CAP_PROP_FPS)
-        print("Frames per second using video.get(cv2.cv.CV_CAP_PROP_FPS): {0}".format(fps))
-    else:
-        fps = video_cap.get(cv2.CAP_PROP_FPS)
-        print("Frames per second using video.get(cv2.CAP_PROP_FPS) : {0}".format(fps))
-
-    return fps
 
 
 # Specify folder names
