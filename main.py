@@ -8,10 +8,14 @@ import random
 from joblib import Parallel, delayed
 import time
 import datetime
+import moviepy.editor as mpe
+import pandas as pd
+from selection import *
+from file_handling import *
 
 print("Program: Object Detection")
-print("Release: 0.1.0")
-print("Date: 2020-02-02")
+print("Release: 0.1.1")
+print("Date: 2020-03-14")
 print("Author: Brian Neely")
 print()
 print()
@@ -24,7 +28,7 @@ def object_recognition_image(image_file_path):
     im = cv2.imread(image_file_path)
     bbox, label, conf = cv.detect_common_objects(im)
     output_image = draw_bbox(im, bbox, label, conf)
-    return output_image
+    return output_image, label
 
 
 def chop_microseconds(delta):
@@ -32,14 +36,22 @@ def chop_microseconds(delta):
 
 
 def video_object_recognition(video, outpt_fldr, temp_fldr_base):
+    # Sleep random amount to start due to multithreading
+    time.sleep(random.random() * 10)
+
     # Get file names and extensions
     file_name, extension = os.path.splitext(video)
     file_name = os.path.basename(file_name)
 
     # Create a temp folder for the split video files (1) and processed images (2)
-    rand = random.randrange(0, 1000000000000000, 1)
-    temp_1_fldr = os.path.join(temp_fldr_base, "temp_1 - " + str(rand))
-    temp_2_fldr = os.path.join(temp_fldr_base, "temp_2 - " + str(rand))
+    # Check for existing temp_folder with the same name
+    temp_folder_name_used = True
+    while temp_folder_name_used:
+        rand = random.randrange(0, 1000000000000000, 1)
+        temp_1_fldr = os.path.join(temp_fldr_base, "temp_1 - " + str(rand))
+        temp_2_fldr = os.path.join(temp_fldr_base, "temp_2 - " + str(rand))
+        if not os.path.exists(temp_1_fldr):
+            temp_folder_name_used = False
     # If folder exists, delete it.
     if os.path.exists(temp_1_fldr):
         shutil.rmtree(temp_1_fldr)
@@ -74,9 +86,12 @@ def video_object_recognition(video, outpt_fldr, temp_fldr_base):
     # Process images and save to the processed image temp folder
     num_frames = len(frame_list)
     start_time = time.time()
+    label_list = list()
     print("Processing individual images for " + video + "...")
     for index, image_file in enumerate(frame_list):
-        processed_frame = object_recognition_image(image_file)
+        frame_tuple = object_recognition_image(image_file)
+        processed_frame = frame_tuple[0]
+        label_list.append(frame_tuple[1])
         processed_image_name = os.path.basename(image_file)
         processed_image_out = os.path.join(temp_2_fldr, processed_image_name)
         cv2.imwrite(processed_image_out, processed_frame)
@@ -99,20 +114,54 @@ def video_object_recognition(video, outpt_fldr, temp_fldr_base):
     # Get FPS
     fps = frames_per_second(video)
 
-    # Convert images to video
-    video_out = cv2.VideoWriter(os.path.join(outpt_fldr, os.path.basename(video)), cv2.VideoWriter_fourcc(*'DIVX'), fps,
+    # Convert images to intermediate video
+    intermediate_video_file = os.path.join(temp_2_fldr, os.path.basename(video))
+    video_out = cv2.VideoWriter(intermediate_video_file, cv2.VideoWriter_fourcc(*'DIVX'), fps,
                                 size)
     for j in frame_list_processed:
         img = cv2.imread(j)
         video_out.write(img)
     video_out.release()
-    print("Video created for " + video + " and saved as " + os.path.join(outpt_fldr, video) + "!")
 
-    # Delete the temp folder if it exists
+    # Create video with sound
+    video_clip = mpe.VideoFileClip(intermediate_video_file)
+    audio_clip = mpe.AudioFileClip(video)
+    video_clip.write_videofile(os.path.join(outpt_fldr, os.path.basename(video)), audio=audio_clip, fps=fps)
+
+    print("Video created for " + video + " and saved as " + os.path.join(outpt_fldr, os.path.basename(video)) + "!")
+
+    # Convert the label list into a DF
+    # *Columns = number of objects in video
+    # *Each row is a frame
+    frame_label_dict_list = list()
+    for i in label_list:
+        frame_label_dict = dict()
+        for j in i:
+            if j not in frame_label_dict.keys():
+                frame_label_dict[j] = 1
+            else:
+                frame_label_dict[j] += 1
+
+        # Append frame dictionary to list
+        frame_label_dict_list.append(frame_label_dict)
+
+    # Convert into dataframe
+    label_df_out = pd.DataFrame(frame_label_dict_list)
+
+    # Append name of video to dataframe
+    label_df_out['video'] = video
+
+    # Create frame_list from index
+    label_df_out['frame'] = label_df_out.index
+
+    # Delete the temp folder
     if os.path.exists(temp_1_fldr):
         shutil.rmtree(temp_1_fldr)
     if os.path.exists(temp_2_fldr):
         shutil.rmtree(temp_2_fldr)
+
+    # Return the frame list to original call
+    return label_df_out
 
 
 def frames_per_second(video):
@@ -124,6 +173,7 @@ def frames_per_second(video):
     # Find OpenCV version
     (major_ver, minor_ver, subminor_ver) = cv2.__version__.split('.')
 
+    # Get FPS
     if int(major_ver) < 3:
         fps = video_cap.get(cv2.cv.CV_CAP_PROP_FPS)
         print("Frames per second using video.get(cv2.cv.CV_CAP_PROP_FPS): {0}".format(fps))
@@ -180,7 +230,9 @@ print("Found " + str(len(image_path_list)) + " pictures!")
 
 # Run image recognition
 for i in image_path_list:
-    processed_image = object_recognition_image(i)
+    image_tuple = object_recognition_image(i)
+    processed_image = image_tuple[0]
+    image_label = image_tuple[1]
     processed_image_name = os.path.basename(i)
     processed_image_out = os.path.join(outpt_fldr, processed_image_name)
     cv2.imwrite(processed_image_out, processed_image)
@@ -195,9 +247,31 @@ time.sleep(2)
 print("Creating temporary folder...")
 os.mkdir("temp")
 
-# Process Videos
-print("Running processing on videos...")
-Parallel(n_jobs=16)(delayed(video_object_recognition)(i, outpt_fldr, "temp") for i in video_path_list)
+# Process Videos if there are videos
+if len(video_path_list) > 1:
+    # Ask if label csv is desired.
+    save_video_labels = y_n_question("Do you want to save a csv of the labels from the video (y/n): ")
+
+    # Ask for the output dataset
+    if save_video_labels:
+        # Select a output file
+        video_labels_path = select_file_out_csv()
+
+        # Try to delete the existing file if can't, throw error and select another file
+        while not delete_file(video_labels_path):
+            print("Existing file cannot be deleted. Please select another file...")
+            video_labels_path = select_file_out_csv()
+
+    print("Running processing on videos...")
+    object_info = Parallel(n_jobs=-1)(delayed(video_object_recognition)(i, outpt_fldr, "temp") for i in video_path_list)
+
+    # Steps to save the video labels
+    if save_video_labels:
+        # Concat dataframes together
+        object_info = pd.concat(object_info)
+
+        # Save output as csv
+        object_info.to_csv("video_labels.csv", index=False)
 
 # Delete temp folder
 if os.path.exists("temp"):
