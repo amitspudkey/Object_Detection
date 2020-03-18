@@ -36,132 +36,136 @@ def chop_microseconds(delta):
 
 
 def video_object_recognition(video, outpt_fldr, temp_fldr_base):
-    # Sleep random amount to start due to multithreading
-    time.sleep(random.random() * 10)
+    try:
+        # Sleep random amount to start due to multithreading
+        time.sleep(random.random() * 10)
 
-    # Get file names and extensions
-    file_name, extension = os.path.splitext(video)
-    file_name = os.path.basename(file_name)
+        # Get file names and extensions
+        file_name, extension = os.path.splitext(video)
+        file_name = os.path.basename(file_name)
 
-    # Create a temp folder for the split video files (1) and processed images (2)
-    # Check for existing temp_folder with the same name
-    temp_folder_name_used = True
-    while temp_folder_name_used:
-        rand = random.randrange(0, 1000000000000000, 1)
-        temp_1_fldr = os.path.join(temp_fldr_base, "temp_1 - " + str(rand))
-        temp_2_fldr = os.path.join(temp_fldr_base, "temp_2 - " + str(rand))
-        if not os.path.exists(temp_1_fldr):
-            temp_folder_name_used = False
-    # If folder exists, delete it.
-    if os.path.exists(temp_1_fldr):
-        shutil.rmtree(temp_1_fldr)
-    if os.path.exists(temp_2_fldr):
-        shutil.rmtree(temp_2_fldr)
-    # Create new temp folder
-    os.mkdir(temp_1_fldr)
-    os.mkdir(temp_2_fldr)
+        # Create a temp folder for the split video files (1) and processed images (2)
+        # Check for existing temp_folder with the same name
+        temp_folder_name_used = True
+        while temp_folder_name_used:
+            rand = random.randrange(0, 1000000000000000, 1)
+            temp_1_fldr = os.path.join(temp_fldr_base, "temp_1 - " + str(rand))
+            temp_2_fldr = os.path.join(temp_fldr_base, "temp_2 - " + str(rand))
+            if not os.path.exists(temp_1_fldr):
+                temp_folder_name_used = False
+        # If folder exists, delete it.
+        if os.path.exists(temp_1_fldr):
+            shutil.rmtree(temp_1_fldr)
+        if os.path.exists(temp_2_fldr):
+            shutil.rmtree(temp_2_fldr)
+        # Create new temp folder
+        os.mkdir(temp_1_fldr)
+        os.mkdir(temp_2_fldr)
 
-    # Create a list of the frames in order
-    frame_list = list()
-    frame_list_processed = list()
+        # Create a list of the frames in order
+        frame_list = list()
+        frame_list_processed = list()
 
-    print("Splitting video file [" + video + "] into individual images...")
+        print("Splitting video file [" + video + "] into individual images...")
 
-    # Capture video
-    vidcap = cv2.VideoCapture(video)
+        # Capture video
+        vidcap = cv2.VideoCapture(video)
 
-    # Read the first frame
-    success, image = vidcap.read()
-    frame = 0
-
-    # While continuing to get new frames, read each one
-    while success:
-        image_out_name = os.path.join(temp_1_fldr, file_name + "_" + str(frame) + extension + ".jpg")
-        cv2.imwrite(image_out_name, image)
-        frame_list.append(image_out_name)
+        # Read the first frame
         success, image = vidcap.read()
-        frame += 1
-    print("Video file [" + video + "] into split into individual images!")
+        frame = 0
 
-    # Process images and save to the processed image temp folder
-    num_frames = len(frame_list)
-    start_time = time.time()
-    label_list = list()
-    print("Processing individual images for " + video + "...")
-    for index, image_file in enumerate(frame_list):
-        frame_tuple = object_recognition_image(image_file)
-        processed_frame = frame_tuple[0]
-        label_list.append(frame_tuple[1])
-        processed_image_name = os.path.basename(image_file)
-        processed_image_out = os.path.join(temp_2_fldr, processed_image_name)
-        cv2.imwrite(processed_image_out, processed_frame)
-        frame_list_processed.append(processed_image_out)
-        # Print for frames processed and est time
-        if index % 100 == 0 and index > 0:
-            fps_process = index / (time.time() - start_time)
-            remaining_frames = num_frames - index
-            est_time = chop_microseconds(datetime.timedelta(seconds=remaining_frames / fps_process))
-            statement = "{}: Completed {}th frame out of {}. FPS: {}. Estimated Time Remaining: {}"
-            print(statement.format(file_name, str(index), str(num_frames), str(round(fps_process, 2)), str(est_time)))
-    print("Individual images processed for " + video + "!")
+        # While continuing to get new frames, read each one
+        while success:
+            image_out_name = os.path.join(temp_1_fldr, file_name + "_" + str(frame) + extension + ".jpg")
+            cv2.imwrite(image_out_name, image)
+            frame_list.append(image_out_name)
+            success, image = vidcap.read()
+            frame += 1
+        print("Video file [" + video + "] into split into individual images!")
 
-    # Get image frame size
-    print("Creating video for " + video + "...")
-    img = cv2.imread(frame_list_processed[0])
-    height, width, layers = img.shape
-    size = (width, height)
+        # Process images and save to the processed image temp folder
+        num_frames = len(frame_list)
+        start_time = time.time()
+        label_list = list()
+        print("Processing individual images for " + video + "...")
+        for index, image_file in enumerate(frame_list):
+            frame_tuple = object_recognition_image(image_file)
+            processed_frame = frame_tuple[0]
+            label_list.append(frame_tuple[1])
+            processed_image_name = os.path.basename(image_file)
+            processed_image_out = os.path.join(temp_2_fldr, processed_image_name)
+            cv2.imwrite(processed_image_out, processed_frame)
+            frame_list_processed.append(processed_image_out)
+            # Print for frames processed and est time
+            if index % 100 == 0 and index > 0:
+                fps_process = index / (time.time() - start_time)
+                remaining_frames = num_frames - index
+                est_time = chop_microseconds(datetime.timedelta(seconds=remaining_frames / fps_process))
+                statement = "{}: Completed {}th frame out of {}. FPS: {}. Estimated Time Remaining: {}"
+                print(statement.format(file_name, str(index), str(num_frames), str(round(fps_process, 2)), str(est_time)))
+        print("Individual images processed for " + video + "!")
 
-    # Get FPS
-    fps = frames_per_second(video)
+        # Get image frame size
+        print("Creating video for " + video + "...")
+        img = cv2.imread(frame_list_processed[0])
+        height, width, layers = img.shape
+        size = (width, height)
 
-    # Convert images to intermediate video
-    intermediate_video_file = os.path.join(temp_2_fldr, os.path.basename(video))
-    video_out = cv2.VideoWriter(intermediate_video_file, cv2.VideoWriter_fourcc(*'DIVX'), fps,
-                                size)
-    for j in frame_list_processed:
-        img = cv2.imread(j)
-        video_out.write(img)
-    video_out.release()
+        # Get FPS
+        fps = frames_per_second(video)
 
-    # Create video with sound
-    video_clip = mpe.VideoFileClip(intermediate_video_file)
-    audio_clip = mpe.AudioFileClip(video)
-    video_clip.write_videofile(os.path.join(outpt_fldr, os.path.basename(video)), audio=audio_clip, fps=fps)
+        # Convert images to intermediate video
+        intermediate_video_file = os.path.join(temp_2_fldr, os.path.basename(video))
+        video_out = cv2.VideoWriter(intermediate_video_file, cv2.VideoWriter_fourcc(*'DIVX'), fps,
+                                    size)
+        for j in frame_list_processed:
+            img = cv2.imread(j)
+            video_out.write(img)
+        video_out.release()
 
-    print("Video created for " + video + " and saved as " + os.path.join(outpt_fldr, os.path.basename(video)) + "!")
+        # Create video with sound
+        video_clip = mpe.VideoFileClip(intermediate_video_file)
+        audio_clip = mpe.AudioFileClip(video)
+        video_clip.write_videofile(os.path.join(outpt_fldr, os.path.basename(video)), audio=audio_clip, fps=fps)
 
-    # Convert the label list into a DF
-    # *Columns = number of objects in video
-    # *Each row is a frame
-    frame_label_dict_list = list()
-    for i in label_list:
-        frame_label_dict = dict()
-        for j in i:
-            if j not in frame_label_dict.keys():
-                frame_label_dict[j] = 1
-            else:
-                frame_label_dict[j] += 1
+        print("Video created for " + video + " and saved as " + os.path.join(outpt_fldr, os.path.basename(video)) + "!")
 
-        # Append frame dictionary to list
-        frame_label_dict_list.append(frame_label_dict)
+        # Convert the label list into a DF
+        # *Columns = number of objects in video
+        # *Each row is a frame
+        frame_label_dict_list = list()
+        for i in label_list:
+            frame_label_dict = dict()
+            for j in i:
+                if j not in frame_label_dict.keys():
+                    frame_label_dict[j] = 1
+                else:
+                    frame_label_dict[j] += 1
 
-    # Convert into dataframe
-    label_df_out = pd.DataFrame(frame_label_dict_list)
+            # Append frame dictionary to list
+            frame_label_dict_list.append(frame_label_dict)
 
-    # Append name of video to dataframe
-    label_df_out['video'] = video
+        # Convert into dataframe
+        label_df_out = pd.DataFrame(frame_label_dict_list)
 
-    # Create frame_list from index
-    label_df_out['frame'] = label_df_out.index
+        # Append name of video to dataframe
+        label_df_out['video'] = video
 
-    # Delete the temp folder
-    if os.path.exists(temp_1_fldr):
-        shutil.rmtree(temp_1_fldr)
-    if os.path.exists(temp_2_fldr):
-        shutil.rmtree(temp_2_fldr)
+        # Create frame_list from index
+        label_df_out['frame'] = label_df_out.index
 
-    # Return the frame list to original call
-    return label_df_out
+        # Delete the temp folder
+        if os.path.exists(temp_1_fldr):
+            shutil.rmtree(temp_1_fldr)
+        if os.path.exists(temp_2_fldr):
+            shutil.rmtree(temp_2_fldr)
+
+        # Return the frame list to original call
+        return label_df_out
+
+    except:
+        print('Cannot perform object recognition.')
 
 
 def frames_per_second(video):
@@ -204,8 +208,11 @@ if not os.path.exists(outpt_fldr):
     os.mkdir(outpt_fldr)
     print()
 
+# Ask if label csv is desired.
+save_video_labels = y_n_question("Do you want to save a csv of the labels from the video (y/n): ")
+
 # List of all accepted video file formats
-video_formats = {'.MP4', '.MKV', '.AVI'}
+video_formats = {'.MP4', '.MKV', '.AVI', '.WEBM'}
 
 # List of all accepted image file formats
 image_formats = {'.JPEG', '.JPG'}
@@ -249,9 +256,6 @@ os.mkdir("temp")
 
 # Process Videos if there are videos
 if len(video_path_list) > 1:
-    # Ask if label csv is desired.
-    save_video_labels = y_n_question("Do you want to save a csv of the labels from the video (y/n): ")
-
     # Ask for the output dataset
     if save_video_labels:
         # Select a output file
@@ -263,7 +267,7 @@ if len(video_path_list) > 1:
             video_labels_path = select_file_out_csv()
 
     print("Running processing on videos...")
-    object_info = Parallel(n_jobs=-1)(delayed(video_object_recognition)(i, outpt_fldr, "temp") for i in video_path_list)
+    object_info = Parallel(n_jobs=1)(delayed(video_object_recognition)(i, outpt_fldr, "temp") for i in video_path_list)
 
     # Steps to save the video labels
     if save_video_labels:
