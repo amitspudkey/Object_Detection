@@ -94,6 +94,7 @@ def column_selection(headers, task):
             break
     return column
 
+
 def column_selection_multi(headers, task):
     while True:
         try:
@@ -120,3 +121,28 @@ def column_selection_multi(headers, task):
         else:
             break
     return column_name_list
+
+
+def input_int(note, low, high):
+    while True:
+        try:
+            input_value = int(input(note + ': ').strip())
+
+            # Check if input is not between low and high or empty
+            while input_value > high or input_value < low or not input_value:
+                # Check if input was empty
+                if not input_value:
+                    print("Input was blank, please try again...")
+                    input_value = int(input(note + ': ').strip())
+
+                # Check if input is not between low and high
+                if input_value > high or input_value < low:
+                    print("Input is not between " + str(low) + " and " + str(high))
+                    input_value = int(input(note + ': ').strip())
+
+        except ValueError:
+            print("Input must be a Integer between " + str(low) + " and " + str(high))
+            continue
+        else:
+            break
+    return input_value

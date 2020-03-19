@@ -4,7 +4,6 @@ import cvlib as cv
 from cvlib.object_detection import draw_bbox
 import os
 import shutil
-import random
 from joblib import Parallel, delayed
 import time
 import datetime
@@ -12,10 +11,11 @@ import moviepy.editor as mpe
 import pandas as pd
 from selection import *
 from file_handling import *
+import random
 
 print("Program: Object Detection")
-print("Release: 0.1.1")
-print("Date: 2020-03-14")
+print("Release: 0.2.0")
+print("Date: 2020-03-19")
 print("Author: Brian Neely")
 print()
 print()
@@ -35,10 +35,10 @@ def chop_microseconds(delta):
     return delta - datetime.timedelta(microseconds=delta.microseconds)
 
 
-def video_object_recognition(video, outpt_fldr, temp_fldr_base):
+def video_object_recognition(video, outpt_fldr, temp_fldr_base, video_creation, sampling, sampling_rate):
     try:
         # Sleep random amount to start due to multithreading
-        time.sleep(random.random() * 10)
+        time.sleep(random.random() * 5)
 
         # Get file names and extensions
         file_name, extension = os.path.splitext(video)
@@ -77,12 +77,21 @@ def video_object_recognition(video, outpt_fldr, temp_fldr_base):
 
         # While continuing to get new frames, read each one
         while success:
+            # print(str(rand_int) + " : " + str(sampling_rate))
             image_out_name = os.path.join(temp_1_fldr, file_name + "_" + str(frame) + extension + ".jpg")
             cv2.imwrite(image_out_name, image)
             frame_list.append(image_out_name)
             success, image = vidcap.read()
             frame += 1
         print("Video file [" + video + "] into split into individual images!")
+
+        # If sampling selected, remove frames from frame list based on sampling amount
+        if sampling:
+            frame_list_keep = list()
+            for i in frame_list:
+                if random.randint(1, 100) <= sampling_rate:
+                    frame_list_keep.append(i)
+            frame_list = frame_list_keep
 
         # Process images and save to the processed image temp folder
         num_frames = len(frame_list)
@@ -106,30 +115,32 @@ def video_object_recognition(video, outpt_fldr, temp_fldr_base):
                 print(statement.format(file_name, str(index), str(num_frames), str(round(fps_process, 2)), str(est_time)))
         print("Individual images processed for " + video + "!")
 
-        # Get image frame size
-        print("Creating video for " + video + "...")
-        img = cv2.imread(frame_list_processed[0])
-        height, width, layers = img.shape
-        size = (width, height)
+        # If video_creation specified, combine the video
+        if video_creation:
+            # Get image frame size
+            print("Creating video for " + video + "...")
+            img = cv2.imread(frame_list_processed[0])
+            height, width, layers = img.shape
+            size = (width, height)
 
-        # Get FPS
-        fps = frames_per_second(video)
+            # Get FPS
+            fps = frames_per_second(video)
 
-        # Convert images to intermediate video
-        intermediate_video_file = os.path.join(temp_2_fldr, os.path.basename(video))
-        video_out = cv2.VideoWriter(intermediate_video_file, cv2.VideoWriter_fourcc(*'DIVX'), fps,
-                                    size)
-        for j in frame_list_processed:
-            img = cv2.imread(j)
-            video_out.write(img)
-        video_out.release()
+            # Convert images to intermediate video
+            intermediate_video_file = os.path.join(temp_2_fldr, os.path.basename(video))
+            video_out = cv2.VideoWriter(intermediate_video_file, cv2.VideoWriter_fourcc(*'DIVX'), fps,
+                                        size)
+            for j in frame_list_processed:
+                img = cv2.imread(j)
+                video_out.write(img)
+            video_out.release()
 
-        # Create video with sound
-        video_clip = mpe.VideoFileClip(intermediate_video_file)
-        audio_clip = mpe.AudioFileClip(video)
-        video_clip.write_videofile(os.path.join(outpt_fldr, os.path.basename(video)), audio=audio_clip, fps=fps)
+            # Create video with sound
+            video_clip = mpe.VideoFileClip(intermediate_video_file)
+            audio_clip = mpe.AudioFileClip(video)
+            video_clip.write_videofile(os.path.join(outpt_fldr, os.path.basename(video)), audio=audio_clip, fps=fps)
 
-        print("Video created for " + video + " and saved as " + os.path.join(outpt_fldr, os.path.basename(video)) + "!")
+            print("Video created for " + video + " and saved as " + os.path.join(outpt_fldr, os.path.basename(video)) + "!")
 
         # Convert the label list into a DF
         # *Columns = number of objects in video
@@ -155,11 +166,14 @@ def video_object_recognition(video, outpt_fldr, temp_fldr_base):
         # Create frame_list from index
         label_df_out['frame'] = label_df_out.index
 
-        # Delete the temp folder
-        if os.path.exists(temp_1_fldr):
-            shutil.rmtree(temp_1_fldr)
-        if os.path.exists(temp_2_fldr):
-            shutil.rmtree(temp_2_fldr)
+        # Try to delete the temp folder
+        try:
+            if os.path.exists(temp_1_fldr):
+                shutil.rmtree(temp_1_fldr)
+            if os.path.exists(temp_2_fldr):
+                shutil.rmtree(temp_2_fldr)
+        except:
+            print("Couldn't delete temp folder...")
 
         # Return the frame list to original call
         return label_df_out
@@ -208,8 +222,37 @@ if not os.path.exists(outpt_fldr):
     os.mkdir(outpt_fldr)
     print()
 
-# Ask if label csv is desired.
-save_video_labels = y_n_question("Do you want to save a csv of the labels from the video (y/n): ")
+# Program run options
+program_options = ['Video Creation', 'Video Creation with Label Array', 'Label Array', 'Sampled Label Array']
+selected_use = list_selection(program_options, 'Select use for object detection', 'use')
+
+# Save labels
+if selected_use.find('Array') != -1:
+    save_video_labels = True
+
+    # Select a output file
+    video_labels_path = select_file_out_csv()
+
+    # Try to delete the existing file if can't, throw error and select another file
+    while not delete_file(video_labels_path):
+        print("Existing file cannot be deleted. Please select another file...")
+        video_labels_path = select_file_out_csv()
+else:
+    save_video_labels = False
+
+# Sampling
+if selected_use.find('Sampled') != -1:
+    sampling = True
+    sampling_rate = input_int("Input Sampling rate between 1 to 99% (int)", 1, 99)
+else:
+    sampling = False
+    sampling_rate = int(100)
+
+# Video Creation
+if selected_use.find('Video') != -1:
+    video_creation = True
+else:
+    video_creation = False
 
 # List of all accepted video file formats
 video_formats = {'.MP4', '.MKV', '.AVI', '.WEBM'}
@@ -255,19 +298,9 @@ print("Creating temporary folder...")
 os.mkdir("temp")
 
 # Process Videos if there are videos
-if len(video_path_list) > 1:
-    # Ask for the output dataset
-    if save_video_labels:
-        # Select a output file
-        video_labels_path = select_file_out_csv()
-
-        # Try to delete the existing file if can't, throw error and select another file
-        while not delete_file(video_labels_path):
-            print("Existing file cannot be deleted. Please select another file...")
-            video_labels_path = select_file_out_csv()
-
+if len(video_path_list) >= 1:
     print("Running processing on videos...")
-    object_info = Parallel(n_jobs=1)(delayed(video_object_recognition)(i, outpt_fldr, "temp") for i in video_path_list)
+    object_info = Parallel(n_jobs=1)(delayed(video_object_recognition)(i, outpt_fldr, "temp", video_creation, sampling, sampling_rate) for i in video_path_list)
 
     # Steps to save the video labels
     if save_video_labels:
@@ -275,7 +308,7 @@ if len(video_path_list) > 1:
         object_info = pd.concat(object_info)
 
         # Save output as csv
-        object_info.to_csv("video_labels.csv", index=False)
+        object_info.to_csv(video_labels_path, index=False)
 
 # Delete temp folder
 if os.path.exists("temp"):
