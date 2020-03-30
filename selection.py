@@ -146,3 +146,28 @@ def input_int(note, low, high):
         else:
             break
     return input_value
+
+
+def input_float_0_1(note, low, high):
+    while True:
+        try:
+            input_value = float(input(note + ': ').strip())
+
+            # Check if input is not between low and high or empty
+            while input_value > high or input_value < low or not input_value:
+                # Check if input was empty
+                if not input_value:
+                    print("Input was blank, please try again...")
+                    input_value = float(input(note + ': ').strip())
+
+                # Check if input is not between low and high
+                if input_value > high or input_value < low:
+                    print("Input is not between " + str(0) + " and " + str(1))
+                    input_value = float(input(note + ': ').strip())
+
+        except ValueError:
+            print("Input must be a Integer between " + str(low) + " and " + str(high))
+            continue
+        else:
+            break
+    return input_value

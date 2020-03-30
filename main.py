@@ -3,15 +3,16 @@ import cv2
 import cvlib as cv
 from cvlib.object_detection import draw_bbox
 import os
-import shutil
 from joblib import Parallel, delayed
+import shutil
 import time
 import datetime
-import moviepy.editor as mpe
+# import moviepy.editor as mpe
 import pandas as pd
 from selection import *
 from file_handling import *
 import random
+import ffmpeg
 
 print("Program: Object Detection")
 print("Release: 0.2.0")
@@ -20,6 +21,7 @@ print("Author: Brian Neely")
 print()
 print()
 print("This program reads picture and videos from the input folder and runs an object detection program on them.")
+print("Add ffmpeg.exe or install ffmpeg through command line before using this script.")
 print()
 print()
 
@@ -79,19 +81,26 @@ def video_object_recognition(video, outpt_fldr, temp_fldr_base, video_creation, 
         while success:
             # print(str(rand_int) + " : " + str(sampling_rate))
             image_out_name = os.path.join(temp_1_fldr, file_name + "_" + str(frame) + extension + ".jpg")
-            cv2.imwrite(image_out_name, image)
-            frame_list.append(image_out_name)
+
+            # If sampling, write only at sample rate, else always write.
+            if sampling:
+                if random.random() <= sampling_rate:
+                    cv2.imwrite(image_out_name, image)
+                    frame_list.append(image_out_name)
+            else:
+                cv2.imwrite(image_out_name, image)
+                frame_list.append(image_out_name)
             success, image = vidcap.read()
             frame += 1
         print("Video file [" + video + "] into split into individual images!")
 
         # If sampling selected, remove frames from frame list based on sampling amount
-        if sampling:
-            frame_list_keep = list()
-            for i in frame_list:
-                if random.randint(1, 100) <= sampling_rate:
-                    frame_list_keep.append(i)
-            frame_list = frame_list_keep
+        # if sampling:
+        #     frame_list_keep = list()
+        #     for i in frame_list:
+        #         if random.randint(1, 100) <= sampling_rate:
+        #             frame_list_keep.append(i)
+        #     frame_list = frame_list_keep
 
         # Process images and save to the processed image temp folder
         num_frames = len(frame_list)
@@ -128,19 +137,30 @@ def video_object_recognition(video, outpt_fldr, temp_fldr_base, video_creation, 
 
             # Convert images to intermediate video
             intermediate_video_file = os.path.join(temp_2_fldr, os.path.basename(video))
-            video_out = cv2.VideoWriter(intermediate_video_file, cv2.VideoWriter_fourcc(*'DIVX'), fps,
-                                        size)
+            video_out = cv2.VideoWriter(intermediate_video_file, cv2.VideoWriter_fourcc(*'DIVX'), fps, size)
             for j in frame_list_processed:
                 img = cv2.imread(j)
                 video_out.write(img)
             video_out.release()
 
             # Create video with sound
-            video_clip = mpe.VideoFileClip(intermediate_video_file)
-            audio_clip = mpe.AudioFileClip(video)
-            video_clip.write_videofile(os.path.join(outpt_fldr, os.path.basename(video)), audio=audio_clip, fps=fps)
+            # video_clip = mpe.VideoFileClip(intermediate_video_file)
+            # audio_clip = mpe.AudioFileClip(video)
+            # video_clip.write_videofile(os.path.join(outpt_fldr, os.path.basename(video)), audio=audio_clip, fps=fps)
+            try:
+                # Delete file if it exists
+                delete_file(os.path.join(outpt_fldr, os.path.basename(video)))
 
-            print("Video created for " + video + " and saved as " + os.path.join(outpt_fldr, os.path.basename(video)) + "!")
+                # Combine audio and video together
+                input_video = ffmpeg.input(intermediate_video_file)
+                input_audio = ffmpeg.input(video)
+                ffmpeg.output(input_video, input_audio, os.path.join(outpt_fldr, os.path.basename(video)), vcodec='copy').run()
+            except FileNotFoundError:
+                print(
+                    "Could not open ffmpeg. Please ffmpeg in the root directory and try again, run [brew install ffmpeg].")
+
+            print("Video created for " + video + " and saved as " + os.path.join(outpt_fldr, os.path.basename(video))
+                  + "!")
 
         # Convert the label list into a DF
         # *Columns = number of objects in video
@@ -243,10 +263,10 @@ else:
 # Sampling
 if selected_use.find('Sampled') != -1:
     sampling = True
-    sampling_rate = input_int("Input Sampling rate between 1 to 99% (int)", 1, 99)
+    sampling_rate = input_float_0_1("Input Sampling rate between 0.0001 and 1: ", 0.0001, 1)
 else:
     sampling = False
-    sampling_rate = int(100)
+    sampling_rate = float(1)
 
 # Video Creation
 if selected_use.find('Video') != -1:
@@ -288,19 +308,23 @@ for i in image_path_list:
     cv2.imwrite(processed_image_out, processed_image)
 
 # Make temp folder
-if os.path.exists("temp"):
-    print("Deleting old temp folder...")
-    shutil.rmtree("temp")
-    print("Old temp folder deleted!")
-    print()
-time.sleep(2)
-print("Creating temporary folder...")
-os.mkdir("temp")
+try:
+    if os.path.exists("temp"):
+        print("Deleting old temp folder...")
+        shutil.rmtree("temp")
+        print("Old temp folder deleted!")
+        print()
+    time.sleep(2)
+    print("Creating temporary folder...")
+    os.mkdir("temp")
+except:
+    print('Could not delete temp folder.')
 
 # Process Videos if there are videos
 if len(video_path_list) >= 1:
     print("Running processing on videos...")
-    object_info = Parallel(n_jobs=1)(delayed(video_object_recognition)(i, outpt_fldr, "temp", video_creation, sampling, sampling_rate) for i in video_path_list)
+    object_info = Parallel(n_jobs=1)(delayed(video_object_recognition)(i, outpt_fldr, "temp", video_creation, sampling,
+                                                                       sampling_rate) for i in video_path_list)
 
     # Steps to save the video labels
     if save_video_labels:
